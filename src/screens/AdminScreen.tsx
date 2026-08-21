@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import type { UserRole } from '../types'
 
-type AdminTab = 'reps' | 'actions'
+type AdminTab = 'reps' | 'brands' | 'actions'
 
 interface RepRow {
   id: string
@@ -27,6 +27,12 @@ interface ActionRow {
   } | null
 }
 
+interface BrandRow {
+  id: string
+  name: string
+  is_active: boolean
+}
+
 const ROLES: UserRole[] = ['rep', 'manager', 'admin']
 
 export function AdminScreen() {
@@ -35,12 +41,17 @@ export function AdminScreen() {
 
   const [reps,       setReps]       = useState<RepRow[]>([])
   const [actions,    setActions]    = useState<ActionRow[]>([])
+  const [brands,     setBrands]     = useState<BrandRow[]>([])
   const [repsLoading,setRepsLoading]= useState(true)
   const [actLoading, setActLoading] = useState(true)
+  const [brandsLoading,setBrandsLoading] = useState(true)
   const [saving,     setSaving]     = useState<string | null>(null)
+  const [newBrandName, setNewBrandName] = useState('')
+  const [addingBrand,  setAddingBrand]  = useState(false)
 
   useEffect(() => { loadReps() }, [])
   useEffect(() => { if (tab === 'actions') loadActions() }, [tab])
+  useEffect(() => { if (tab === 'brands') loadBrands() }, [tab])
 
   async function loadReps() {
     setRepsLoading(true)
@@ -50,6 +61,16 @@ export function AdminScreen() {
       .order('full_name')
     setReps((data ?? []) as RepRow[])
     setRepsLoading(false)
+  }
+
+  async function loadBrands() {
+    setBrandsLoading(true)
+    const { data } = await supabase
+      .from('ios_brands')
+      .select('id, name, is_active')
+      .order('name')
+    setBrands((data ?? []) as BrandRow[])
+    setBrandsLoading(false)
   }
 
   async function loadActions() {
@@ -72,11 +93,34 @@ export function AdminScreen() {
   }
 
   async function changeRole(rep: RepRow, newRole: UserRole) {
-    if (rep.id === repProfile?.id) return  // can't change own role
+    if (rep.id === repProfile?.id) return
     setSaving(rep.id + newRole)
     await supabase.from('ios_rep_profiles').update({ role: newRole }).eq('id', rep.id)
     setReps(prev => prev.map(r => r.id === rep.id ? { ...r, role: newRole } : r))
     setSaving(null)
+  }
+
+  async function toggleBrand(brand: BrandRow) {
+    setSaving('brand-' + brand.id)
+    await supabase.from('ios_brands').update({ is_active: !brand.is_active }).eq('id', brand.id)
+    setBrands(prev => prev.map(b => b.id === brand.id ? { ...b, is_active: !b.is_active } : b))
+    setSaving(null)
+  }
+
+  async function addBrand() {
+    const name = newBrandName.trim()
+    if (!name) return
+    setAddingBrand(true)
+    const { data, error } = await supabase
+      .from('ios_brands')
+      .insert({ name, is_active: true })
+      .select('id, name, is_active')
+      .single()
+    if (!error && data) {
+      setBrands(prev => [...prev, data as BrandRow].sort((a, b) => a.name.localeCompare(b.name)))
+      setNewBrandName('')
+    }
+    setAddingBrand(false)
   }
 
   function formatDate(iso: string) {
@@ -86,19 +130,23 @@ export function AdminScreen() {
     })
   }
 
+  const TABS: [AdminTab, string][] = [
+    ['reps',    'Reps'],
+    ['brands',  'Brands'],
+    ['actions', 'Follow-ups'],
+  ]
+
   return (
     <div className="min-h-screen bg-ios-ltgrey" style={{ fontFamily: 'Arial, sans-serif' }}>
-      {/* Header */}
       <div className="bg-ios-navy px-4 pt-4 pb-3">
         <p className="text-white font-bold text-lg">Admin</p>
         <p className="text-blue-300 text-xs mt-0.5">
-          Signed in as {repProfile?.full_name} ({repProfile?.role})
+          {repProfile?.full_name} ({repProfile?.role})
         </p>
       </div>
 
-      {/* Tabs */}
       <div className="flex bg-white border-b border-gray-200 text-sm">
-        {([['reps', 'Reps'], ['actions', 'Follow-ups']] as [AdminTab, string][]).map(([key, label]) => (
+        {TABS.map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -116,8 +164,6 @@ export function AdminScreen() {
         <div className="p-4 space-y-2">
           {repsLoading ? (
             <p className="text-gray-400 text-sm text-center py-8">Loading...</p>
-          ) : reps.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-8">No reps found.</p>
           ) : reps.map(rep => (
             <div key={rep.id} className="bg-white rounded-lg px-4 py-3 border border-gray-200">
               <div className="flex items-start justify-between gap-2">
@@ -132,20 +178,15 @@ export function AdminScreen() {
                   )}
                 </div>
                 <div className="flex flex-col items-end gap-1.5 shrink-0">
-                  {/* Active toggle */}
                   <button
                     onClick={() => toggleActive(rep)}
                     disabled={saving === rep.id}
                     className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                      rep.is_active
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-red-100 text-red-700'
+                      rep.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                     }`}
                   >
                     {saving === rep.id ? '...' : rep.is_active ? 'Active' : 'Inactive'}
                   </button>
-
-                  {/* Role selector */}
                   {rep.id !== repProfile?.id ? (
                     <div className="flex gap-1">
                       {ROLES.map(r => (
@@ -173,7 +214,56 @@ export function AdminScreen() {
         </div>
       )}
 
-      {/* Actions tab */}
+      {/* Brands tab */}
+      {tab === 'brands' && (
+        <div className="p-4 space-y-3">
+          {/* Add brand */}
+          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">Add brand</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newBrandName}
+                onChange={e => setNewBrandName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addBrand()}
+                placeholder="Brand name..."
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+              <button
+                onClick={addBrand}
+                disabled={addingBrand || !newBrandName.trim()}
+                className="px-4 py-2 rounded-lg bg-ios-navy text-white text-sm font-bold disabled:opacity-50"
+              >
+                {addingBrand ? '...' : 'Add'}
+              </button>
+            </div>
+          </div>
+
+          {/* Brand list */}
+          {brandsLoading ? (
+            <p className="text-gray-400 text-sm text-center py-8">Loading...</p>
+          ) : brands.length === 0 ? (
+            <p className="text-gray-400 text-sm text-center py-8">No brands. Add one above.</p>
+          ) : brands.map(brand => (
+            <div key={brand.id} className="bg-white rounded-lg px-4 py-3 border border-gray-200 flex items-center justify-between">
+              <p className={`font-bold text-sm ${brand.is_active ? 'text-ios-navy' : 'text-gray-400 line-through'}`}>
+                {brand.name}
+              </p>
+              <button
+                onClick={() => toggleBrand(brand)}
+                disabled={saving === 'brand-' + brand.id}
+                className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  brand.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                }`}
+              >
+                {saving === 'brand-' + brand.id ? '...' : brand.is_active ? 'Active' : 'Inactive'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Follow-ups tab */}
       {tab === 'actions' && (
         <div className="p-4 space-y-2">
           {actLoading ? (
@@ -187,9 +277,7 @@ export function AdminScreen() {
             const retailer = store?.ios_retailers?.name ?? ''
             return (
               <div key={action.id} className="bg-white rounded-lg px-4 py-3 border border-l-4 border-l-amber-400 border-gray-200">
-                <p className="font-bold text-ios-navy text-sm">
-                  {retailer} {store?.name}
-                </p>
+                <p className="font-bold text-ios-navy text-sm">{retailer} {store?.name}</p>
                 <p className="text-gray-500 text-xs">{store?.suburb}</p>
                 <div className="flex items-center justify-between mt-1.5">
                   <p className="text-gray-400 text-xs">
