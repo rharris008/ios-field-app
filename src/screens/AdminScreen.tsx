@@ -4,6 +4,15 @@ import { supabase } from '../lib/supabase'
 import type { UserRole } from '../types'
 
 type AdminTab = 'reps' | 'brands' | 'actions'
+type RepExpandTab = 'brands' | 'stores'
+
+interface StoreSearchResult {
+  id: string
+  name: string
+  suburb: string
+  state: string
+  retailer_name: string
+}
 
 interface RepRow {
   id: string
@@ -13,7 +22,8 @@ interface RepRow {
   state_territory: string | null
   is_active: boolean
   terms_accepted_at: string | null
-  assignedBrandIds?: string[]  // loaded on expand
+  assignedBrandIds?: string[]
+  assignedStoreIds?: string[]
 }
 
 interface ActionRow {
@@ -46,11 +56,16 @@ export function AdminScreen() {
   const [repsLoading,   setRepsLoading]   = useState(true)
   const [actLoading,    setActLoading]    = useState(true)
   const [brandsLoading, setBrandsLoading] = useState(true)
-  const [saving,        setSaving]        = useState<string | null>(null)
-  const [newBrandName,  setNewBrandName]  = useState('')
-  const [addingBrand,   setAddingBrand]   = useState(false)
-  const [expandedRepId, setExpandedRepId] = useState<string | null>(null)
-  const [brandSaving,   setBrandSaving]   = useState<string | null>(null)
+  const [saving,         setSaving]        = useState<string | null>(null)
+  const [newBrandName,   setNewBrandName]  = useState('')
+  const [addingBrand,    setAddingBrand]   = useState(false)
+  const [expandedRepId,  setExpandedRepId] = useState<string | null>(null)
+  const [repExpandTab,   setRepExpandTab]  = useState<RepExpandTab>('brands')
+  const [brandSaving,    setBrandSaving]   = useState<string | null>(null)
+  const [storeQuery,     setStoreQuery]    = useState('')
+  const [storeResults,   setStoreResults]  = useState<StoreSearchResult[]>([])
+  const [storeSaving,    setStoreSaving]   = useState<string | null>(null)
+  const [assignedStores, setAssignedStores] = useState<Record<string, StoreSearchResult[]>>({})
 
   useEffect(() => { loadReps() }, [])
   useEffect(() => { if (tab === 'actions') loadActions() }, [tab])
@@ -103,10 +118,76 @@ export function AdminScreen() {
       return
     }
     setExpandedRepId(repId)
+    setRepExpandTab('brands')
+    setStoreQuery('')
+    setStoreResults([])
     const rep = reps.find(r => r.id === repId)
-    if (!rep?.assignedBrandIds) {
-      await loadRepBrands(repId)
-    }
+    if (!rep?.assignedBrandIds) await loadRepBrands(repId)
+    if (!assignedStores[repId]) await loadRepStores(repId)
+  }
+
+  async function loadRepStores(repId: string) {
+    const { data } = await supabase
+      .from('ios_rep_stores')
+      .select('store_id, ios_stores(id, name, suburb, state, ios_retailers(name))')
+      .eq('rep_id', repId)
+    type Row = { store_id: string; ios_stores: { id: string; name: string; suburb: string; state: string; ios_retailers: { name: string } | null } | null }
+    const stores: StoreSearchResult[] = ((data ?? []) as unknown as Row[]).map(r => ({
+      id: r.ios_stores?.id ?? r.store_id,
+      name: r.ios_stores?.name ?? '',
+      suburb: r.ios_stores?.suburb ?? '',
+      state: r.ios_stores?.state ?? '',
+      retailer_name: r.ios_stores?.ios_retailers?.name ?? '',
+    }))
+    setAssignedStores(prev => ({ ...prev, [repId]: stores }))
+    setReps(prev => prev.map(r => r.id === repId ? { ...r, assignedStoreIds: stores.map(s => s.id) } : r))
+  }
+
+  async function searchStoresForRep(q: string) {
+    setStoreQuery(q)
+    if (q.length < 2) { setStoreResults([]); return }
+    const { data } = await supabase
+      .from('ios_stores')
+      .select('id, name, suburb, state, ios_retailers(name)')
+      .or(`name.ilike.%${q}%,suburb.ilike.%${q}%,postcode.ilike.%${q}%`)
+      .eq('is_active', true)
+      .limit(12)
+    setStoreResults((data ?? []).map((s: Record<string, unknown>) => ({
+      id: s.id as string, name: s.name as string, suburb: s.suburb as string, state: s.state as string,
+      retailer_name: (s.ios_retailers as { name: string } | null)?.name ?? '',
+    })))
+  }
+
+  async function assignStore(repId: string, store: StoreSearchResult) {
+    const key = `store-${repId}-${store.id}`
+    setStoreSaving(key)
+    await supabase.from('ios_rep_stores').insert({ rep_id: repId, store_id: store.id })
+    setAssignedStores(prev => ({
+      ...prev,
+      [repId]: [...(prev[repId] ?? []), store].sort((a, b) => a.name.localeCompare(b.name)),
+    }))
+    setReps(prev => prev.map(r => r.id === repId
+      ? { ...r, assignedStoreIds: [...(r.assignedStoreIds ?? []), store.id] }
+      : r
+    ))
+    setStoreQuery('')
+    setStoreResults([])
+    setStoreSaving(null)
+  }
+
+  async function removeStore(repId: string, storeId: string) {
+    const key = `store-${repId}-${storeId}`
+    setStoreSaving(key)
+    await supabase.from('ios_rep_stores').delete().eq('rep_id', repId).eq('store_id', storeId)
+    setAssignedStores(prev => ({
+      ...prev,
+      [repId]: (prev[repId] ?? []).filter(s => s.id !== storeId),
+    }))
+    setReps(prev => prev.map(r => r.id === repId
+      ? { ...r, assignedStoreIds: (r.assignedStoreIds ?? []).filter(id => id !== storeId) }
+      : r
+    ))
+    setStoreSaving(null)
   }
 
   async function toggleRepBrand(rep: RepRow, brandId: string) {
@@ -263,43 +344,113 @@ export function AdminScreen() {
                     </div>
                   </div>
 
-                  {/* Brand assignment toggle */}
+                  {/* Expand toggle */}
                   <button
                     onClick={() => toggleExpand(rep.id)}
                     className="mt-2 text-xs text-ios-blue font-bold"
                   >
-                    {isExpanded ? 'Hide brand assignment' : 'Assign brands'}
+                    {isExpanded ? 'Collapse' : 'Assign brands / stores'}
                   </button>
                 </div>
 
-                {/* Brand assignment panel */}
+                {/* Brand + Store assignment panel */}
                 {isExpanded && (
-                  <div className="border-t border-gray-100 bg-gray-50 px-4 py-3">
-                    <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">
-                      Brands this rep covers
-                    </p>
-                    {brandsForAssignment.length === 0 ? (
-                      <p className="text-xs text-gray-400">No active brands. Add brands in the Brands tab first.</p>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        {brandsForAssignment.map(brand => {
-                          const assigned = rep.assignedBrandIds?.includes(brand.id) ?? false
-                          const key = `brand-${rep.id}-${brand.id}`
-                          return (
+                  <div className="border-t border-gray-100 bg-gray-50">
+                    {/* Mini tab bar */}
+                    <div className="flex border-b border-gray-200">
+                      {(['brands', 'stores'] as RepExpandTab[]).map(t => (
+                        <button
+                          key={t}
+                          onClick={() => setRepExpandTab(t)}
+                          className={`flex-1 py-2 text-xs font-bold capitalize ${
+                            repExpandTab === t ? 'text-ios-navy border-b-2 border-ios-navy' : 'text-gray-500'
+                          }`}
+                        >
+                          {t === 'stores' ? `Stores (${(assignedStores[rep.id] ?? []).length})` : 'Brands'}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Brands sub-panel */}
+                    {repExpandTab === 'brands' && (
+                      <div className="px-4 py-3">
+                        <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">
+                          Brands this rep covers
+                        </p>
+                        {brandsForAssignment.length === 0 ? (
+                          <p className="text-xs text-gray-400">No active brands — add in Brands tab.</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {brandsForAssignment.map(brand => {
+                              const assigned = rep.assignedBrandIds?.includes(brand.id) ?? false
+                              const key = `brand-${rep.id}-${brand.id}`
+                              return (
+                                <button
+                                  key={brand.id}
+                                  onClick={() => toggleRepBrand(rep, brand.id)}
+                                  disabled={brandSaving === key || !rep.assignedBrandIds}
+                                  className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${
+                                    assigned
+                                      ? 'bg-ios-navy text-white border-ios-navy'
+                                      : 'bg-white text-gray-600 border-gray-300'
+                                  } disabled:opacity-50`}
+                                >
+                                  {brandSaving === key ? '...' : brand.name}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Stores sub-panel */}
+                    {repExpandTab === 'stores' && (
+                      <div className="px-4 py-3 space-y-2">
+                        <input
+                          type="search"
+                          value={storeQuery}
+                          onChange={e => searchStoresForRep(e.target.value)}
+                          placeholder="Search stores to assign..."
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs"
+                        />
+                        {storeResults.filter(s => !(rep.assignedStoreIds ?? []).includes(s.id)).map(s => (
+                          <button
+                            key={s.id}
+                            onClick={() => assignStore(rep.id, s)}
+                            disabled={storeSaving === `store-${rep.id}-${s.id}`}
+                            className="w-full text-left bg-white rounded-lg px-3 py-2 border border-gray-200 text-xs flex items-center justify-between"
+                          >
+                            <span>
+                              <span className="font-bold text-ios-navy">{s.retailer_name} {s.name}</span>
+                              <span className="text-gray-500 ml-1">· {s.suburb}, {s.state}</span>
+                            </span>
+                            <span className="text-ios-blue font-bold ml-2">+ Add</span>
+                          </button>
+                        ))}
+
+                        {/* Assigned stores list */}
+                        {(assignedStores[rep.id] ?? []).length === 0 && !storeQuery && (
+                          <p className="text-gray-400 text-xs text-center py-2">No stores assigned yet.</p>
+                        )}
+                        {(assignedStores[rep.id] ?? []).map(s => (
+                          <div
+                            key={s.id}
+                            className="bg-white rounded-lg px-3 py-2 border border-gray-200 text-xs flex items-center justify-between"
+                          >
+                            <span>
+                              <span className="font-bold text-ios-navy">{s.retailer_name} {s.name}</span>
+                              <span className="text-gray-500 ml-1">· {s.suburb}, {s.state}</span>
+                            </span>
                             <button
-                              key={brand.id}
-                              onClick={() => toggleRepBrand(rep, brand.id)}
-                              disabled={brandSaving === key || !rep.assignedBrandIds}
-                              className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${
-                                assigned
-                                  ? 'bg-ios-navy text-white border-ios-navy'
-                                  : 'bg-white text-gray-600 border-gray-300'
-                              } disabled:opacity-50`}
+                              onClick={() => removeStore(rep.id, s.id)}
+                              disabled={storeSaving === `store-${rep.id}-${s.id}`}
+                              className="text-red-400 font-bold ml-2 disabled:opacity-50"
                             >
-                              {brandSaving === key ? '...' : brand.name}
+                              ×
                             </button>
-                          )
-                        })}
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>

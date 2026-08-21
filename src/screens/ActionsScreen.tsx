@@ -19,8 +19,8 @@ interface ActionRow {
   created_at: string
   ios_stores: { name: string; suburb: string; state: string; ios_retailers: { name: string } | null } | null
   ios_brands: { name: string } | null
-  raised: { display_name: string } | null
-  assigned: { display_name: string } | null
+  raised: { full_name: string } | null
+  assigned: { full_name: string } | null
 }
 
 const STATUS_LABELS: Record<ActionStatus, string> = {
@@ -68,8 +68,8 @@ export function ActionsScreen() {
       .select(`id, title, description, status, due_date, created_at,
         ios_stores(name, suburb, state, ios_retailers(name)),
         ios_brands(name),
-        raised:raised_by(display_name),
-        assigned:assigned_to(display_name)`)
+        raised:raised_by(full_name),
+        assigned:assigned_to(full_name)`)
       .order('created_at', { ascending: false })
       .limit(80)
 
@@ -284,8 +284,8 @@ export function ActionsScreen() {
                     <p className="text-gray-700 text-xs">{a.description}</p>
                   )}
                   <div className="text-xs text-gray-400 space-y-0.5">
-                    {a.raised && <p>Raised by: {(a.raised as unknown as { display_name: string }).display_name}</p>}
-                    {a.assigned && <p>Assigned to: {(a.assigned as unknown as { display_name: string }).display_name}</p>}
+                    {a.raised && <p>Raised by: {(a.raised as unknown as { full_name: string }).full_name}</p>}
+                    {a.assigned && <p>Assigned to: {(a.assigned as unknown as { full_name: string }).full_name}</p>}
                     <p>Created: {new Date(a.created_at).toLocaleDateString('en-AU')}</p>
                   </div>
                   {a.status !== 'resolved' && (
