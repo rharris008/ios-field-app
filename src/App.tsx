@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { VisitProvider } from './contexts/VisitContext'
 import { LoginPage } from './components/auth/LoginPage'
 import { PendingActivation } from './components/auth/PendingActivation'
 import { TermsModal } from './components/terms/TermsModal'
@@ -15,7 +16,9 @@ export default function App() {
   return (
     <HashRouter>
       <AuthProvider>
-        <AppRoutes />
+        <VisitProvider>
+          <AppRoutes />
+        </VisitProvider>
       </AuthProvider>
     </HashRouter>
   )
