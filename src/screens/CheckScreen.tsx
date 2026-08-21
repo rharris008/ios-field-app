@@ -9,7 +9,7 @@ import type { Store, VisitType } from '../types'
 
 export function CheckScreen() {
   const { activeVisit, startVisit } = useVisit()
-  const { repProfile } = useAuth()
+  const { repProfile, repBrands } = useAuth()
 
   const [query,    setQuery]    = useState('')
   const [results,  setResults]  = useState<Store[]>([])
@@ -35,7 +35,7 @@ export function CheckScreen() {
       localId:    uuid(),
       store:      selected,
       visitType,
-      brandIds:   [],
+      brandIds:   repBrands.map(b => b.id),
       checkinAt:  now,
       checkinLat: pos?.lat ?? null,
       checkinLng: pos?.lng ?? null,
@@ -46,7 +46,18 @@ export function CheckScreen() {
 
   return (
     <div className="p-4" style={{ fontFamily: 'Arial, sans-serif' }}>
-      <h1 className="text-ios-navy text-lg font-bold mb-4">Check In</h1>
+      <h1 className="text-ios-navy text-lg font-bold mb-2">Check In</h1>
+      {repBrands.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {repBrands.map(b => (
+            <span key={b.id} className="px-2.5 py-1 rounded-full bg-ios-navy text-white text-xs font-bold">
+              {b.name}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-amber-600 text-xs mb-4">No brands assigned — contact your manager.</p>
+      )}
 
       {!selected ? (
         <>

@@ -13,6 +13,7 @@ interface RepRow {
   state_territory: string | null
   is_active: boolean
   terms_accepted_at: string | null
+  assignedBrandIds?: string[]  // loaded on expand
 }
 
 interface ActionRow {
@@ -36,18 +37,20 @@ interface BrandRow {
 const ROLES: UserRole[] = ['rep', 'manager', 'admin']
 
 export function AdminScreen() {
-  const { repProfile } = useAuth()
+  const { repProfile, brands: allBrands } = useAuth()
   const [tab, setTab] = useState<AdminTab>('reps')
 
-  const [reps,       setReps]       = useState<RepRow[]>([])
-  const [actions,    setActions]    = useState<ActionRow[]>([])
-  const [brands,     setBrands]     = useState<BrandRow[]>([])
-  const [repsLoading,setRepsLoading]= useState(true)
-  const [actLoading, setActLoading] = useState(true)
-  const [brandsLoading,setBrandsLoading] = useState(true)
-  const [saving,     setSaving]     = useState<string | null>(null)
-  const [newBrandName, setNewBrandName] = useState('')
-  const [addingBrand,  setAddingBrand]  = useState(false)
+  const [reps,          setReps]          = useState<RepRow[]>([])
+  const [actions,       setActions]       = useState<ActionRow[]>([])
+  const [brands,        setBrands]        = useState<BrandRow[]>([])
+  const [repsLoading,   setRepsLoading]   = useState(true)
+  const [actLoading,    setActLoading]    = useState(true)
+  const [brandsLoading, setBrandsLoading] = useState(true)
+  const [saving,        setSaving]        = useState<string | null>(null)
+  const [newBrandName,  setNewBrandName]  = useState('')
+  const [addingBrand,   setAddingBrand]   = useState(false)
+  const [expandedRepId, setExpandedRepId] = useState<string | null>(null)
+  const [brandSaving,   setBrandSaving]   = useState<string | null>(null)
 
   useEffect(() => { loadReps() }, [])
   useEffect(() => { if (tab === 'actions') loadActions() }, [tab])
@@ -83,6 +86,50 @@ export function AdminScreen() {
       .limit(100)
     setActions((data ?? []) as unknown as ActionRow[])
     setActLoading(false)
+  }
+
+  async function loadRepBrands(repId: string) {
+    const { data } = await supabase
+      .from('ios_rep_brands')
+      .select('brand_id')
+      .eq('rep_id', repId)
+    const ids = (data ?? []).map((r: { brand_id: string }) => r.brand_id)
+    setReps(prev => prev.map(r => r.id === repId ? { ...r, assignedBrandIds: ids } : r))
+  }
+
+  async function toggleExpand(repId: string) {
+    if (expandedRepId === repId) {
+      setExpandedRepId(null)
+      return
+    }
+    setExpandedRepId(repId)
+    const rep = reps.find(r => r.id === repId)
+    if (!rep?.assignedBrandIds) {
+      await loadRepBrands(repId)
+    }
+  }
+
+  async function toggleRepBrand(rep: RepRow, brandId: string) {
+    if (!rep.assignedBrandIds) return
+    const key = `brand-${rep.id}-${brandId}`
+    setBrandSaving(key)
+    const has = rep.assignedBrandIds.includes(brandId)
+    if (has) {
+      await supabase.from('ios_rep_brands').delete().eq('rep_id', rep.id).eq('brand_id', brandId)
+      setReps(prev => prev.map(r =>
+        r.id === rep.id
+          ? { ...r, assignedBrandIds: r.assignedBrandIds?.filter(id => id !== brandId) }
+          : r
+      ))
+    } else {
+      await supabase.from('ios_rep_brands').insert({ rep_id: rep.id, brand_id: brandId })
+      setReps(prev => prev.map(r =>
+        r.id === rep.id
+          ? { ...r, assignedBrandIds: [...(r.assignedBrandIds ?? []), brandId] }
+          : r
+      ))
+    }
+    setBrandSaving(null)
   }
 
   async function toggleActive(rep: RepRow) {
@@ -136,6 +183,8 @@ export function AdminScreen() {
     ['actions', 'Follow-ups'],
   ]
 
+  const brandsForAssignment = allBrands.filter(b => b.is_active)
+
   return (
     <div className="min-h-screen bg-ios-ltgrey" style={{ fontFamily: 'Arial, sans-serif' }}>
       <div className="bg-ios-navy px-4 pt-4 pb-3">
@@ -164,53 +213,100 @@ export function AdminScreen() {
         <div className="p-4 space-y-2">
           {repsLoading ? (
             <p className="text-gray-400 text-sm text-center py-8">Loading...</p>
-          ) : reps.map(rep => (
-            <div key={rep.id} className="bg-white rounded-lg px-4 py-3 border border-gray-200">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-bold text-ios-navy text-sm truncate">{rep.full_name}</p>
-                  <p className="text-gray-500 text-xs truncate">{rep.email}</p>
-                  {rep.state_territory && (
-                    <p className="text-gray-400 text-xs">{rep.state_territory}</p>
-                  )}
-                  {!rep.terms_accepted_at && (
-                    <p className="text-amber-600 text-xs mt-0.5">Terms not accepted</p>
-                  )}
-                </div>
-                <div className="flex flex-col items-end gap-1.5 shrink-0">
-                  <button
-                    onClick={() => toggleActive(rep)}
-                    disabled={saving === rep.id}
-                    className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                      rep.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                    }`}
-                  >
-                    {saving === rep.id ? '...' : rep.is_active ? 'Active' : 'Inactive'}
-                  </button>
-                  {rep.id !== repProfile?.id ? (
-                    <div className="flex gap-1">
-                      {ROLES.map(r => (
-                        <button
-                          key={r}
-                          onClick={() => changeRole(rep, r)}
-                          disabled={!!saving}
-                          className={`px-2 py-0.5 rounded text-xs capitalize ${
-                            rep.role === r
-                              ? 'bg-ios-navy text-white'
-                              : 'border border-gray-300 text-gray-600'
-                          }`}
-                        >
-                          {r}
-                        </button>
-                      ))}
+          ) : reps.map(rep => {
+            const isExpanded = expandedRepId === rep.id
+            return (
+              <div key={rep.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                {/* Rep header row */}
+                <div className="px-4 py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-bold text-ios-navy text-sm truncate">{rep.full_name}</p>
+                      <p className="text-gray-500 text-xs truncate">{rep.email}</p>
+                      {rep.state_territory && (
+                        <p className="text-gray-400 text-xs">{rep.state_territory}</p>
+                      )}
+                      {!rep.terms_accepted_at && (
+                        <p className="text-amber-600 text-xs mt-0.5">Terms not accepted</p>
+                      )}
                     </div>
-                  ) : (
-                    <span className="text-xs text-gray-400 capitalize">{rep.role} (you)</span>
-                  )}
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <button
+                        onClick={() => toggleActive(rep)}
+                        disabled={saving === rep.id}
+                        className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                          rep.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}
+                      >
+                        {saving === rep.id ? '...' : rep.is_active ? 'Active' : 'Inactive'}
+                      </button>
+                      {rep.id !== repProfile?.id ? (
+                        <div className="flex gap-1">
+                          {ROLES.map(r => (
+                            <button
+                              key={r}
+                              onClick={() => changeRole(rep, r)}
+                              disabled={!!saving}
+                              className={`px-2 py-0.5 rounded text-xs capitalize ${
+                                rep.role === r
+                                  ? 'bg-ios-navy text-white'
+                                  : 'border border-gray-300 text-gray-600'
+                              }`}
+                            >
+                              {r}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400 capitalize">{rep.role} (you)</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Brand assignment toggle */}
+                  <button
+                    onClick={() => toggleExpand(rep.id)}
+                    className="mt-2 text-xs text-ios-blue font-bold"
+                  >
+                    {isExpanded ? 'Hide brand assignment' : 'Assign brands'}
+                  </button>
                 </div>
+
+                {/* Brand assignment panel */}
+                {isExpanded && (
+                  <div className="border-t border-gray-100 bg-gray-50 px-4 py-3">
+                    <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">
+                      Brands this rep covers
+                    </p>
+                    {brandsForAssignment.length === 0 ? (
+                      <p className="text-xs text-gray-400">No active brands. Add brands in the Brands tab first.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {brandsForAssignment.map(brand => {
+                          const assigned = rep.assignedBrandIds?.includes(brand.id) ?? false
+                          const key = `brand-${rep.id}-${brand.id}`
+                          return (
+                            <button
+                              key={brand.id}
+                              onClick={() => toggleRepBrand(rep, brand.id)}
+                              disabled={brandSaving === key || !rep.assignedBrandIds}
+                              className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${
+                                assigned
+                                  ? 'bg-ios-navy text-white border-ios-navy'
+                                  : 'bg-white text-gray-600 border-gray-300'
+                              } disabled:opacity-50`}
+                            >
+                              {brandSaving === key ? '...' : brand.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
