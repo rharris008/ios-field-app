@@ -72,7 +72,7 @@ interface StateSummary {
 
 interface RepProfile {
   id: string
-  display_name: string
+  full_name: string
 }
 
 const RANGE_DAYS: Record<DateRange, number> = { '7d': 7, '30d': 30, '90d': 90 }
@@ -155,7 +155,7 @@ export function ReportsScreen() {
     // 4. Load rep profiles for By Rep view
     const { data: repData } = await supabase
       .from('ios_rep_profiles')
-      .select('id, display_name')
+      .select('id, full_name')
       .eq('is_active', true)
     setRepProfiles((repData ?? []) as RepProfile[])
 
@@ -237,7 +237,7 @@ export function ReportsScreen() {
   const repMap = new Map<string, RepSummary>()
   for (const v of visits) {
     const rep = repProfiles.find(r => r.id === v.rep_id)
-    const repName = rep?.display_name ?? 'Unknown'
+    const repName = rep?.full_name ?? 'Unknown'
     const existing = repMap.get(v.rep_id)
     const storeId = v.ios_stores?.id ?? ''
     if (!existing) {

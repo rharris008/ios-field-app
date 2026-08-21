@@ -13,6 +13,7 @@ import { AdminScreen } from './screens/AdminScreen'
 import { StoresScreen } from './screens/StoresScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
 import { VisitDetailScreen } from './screens/VisitDetailScreen'
+import { StoreDetailScreen } from './screens/StoreDetailScreen'
 import { ReportsScreen } from './screens/ReportsScreen'
 import { ActionsScreen } from './screens/ActionsScreen'
 
@@ -71,6 +72,7 @@ function AppRoutes() {
     <Routes>
       {/* Full-screen routes (no bottom nav) */}
       <Route path="/visit/:id" element={<VisitDetailScreen />} />
+      <Route path="/store/:id" element={<StoreDetailScreen />} />
 
       {/* Tab shell routes */}
       <Route element={<Layout />}>

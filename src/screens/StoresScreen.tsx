@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { searchStores, db } from '../lib/db'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -12,6 +13,7 @@ interface LastVisit {
 
 export function StoresScreen() {
   const { repProfile } = useAuth()
+  const navigate = useNavigate()
   const isManager = repProfile?.role === 'manager' || repProfile?.role === 'admin'
 
   const [query,      setQuery]      = useState('')
@@ -128,10 +130,11 @@ export function StoresScreen() {
               const lv = lastVisits[store.id]
               const overdue = isOverdue(store, lv)
               return (
-                <div
+                <button
                   key={store.id}
-                  className={`bg-white rounded-lg px-4 py-3 border ${
-                    overdue ? 'border-l-4 border-l-ios-amber border-gray-200' : 'border-gray-200'
+                  onClick={() => navigate(`/store/${store.id}`)}
+                  className={`w-full bg-white rounded-lg px-4 py-3 border text-left ${
+                    overdue ? 'border-l-4 border-l-amber-400 border-gray-200' : 'border-gray-200'
                   }`}
                 >
                   <div className="flex items-start justify-between">
@@ -147,11 +150,11 @@ export function StoresScreen() {
                     <div className="text-right shrink-0 ml-2">
                       {lv ? (
                         <>
-                          <p className={`text-xs font-bold ${overdue ? 'text-ios-amber' : 'text-gray-500'}`}>
+                          <p className={`text-xs font-bold ${overdue ? 'text-amber-500' : 'text-gray-500'}`}>
                             {formatLastVisit(lv.checkinAt)}
                           </p>
                           {overdue && (
-                            <p className="text-ios-amber text-xs">Overdue</p>
+                            <p className="text-amber-500 text-xs">Overdue</p>
                           )}
                         </>
                       ) : (
@@ -164,7 +167,7 @@ export function StoresScreen() {
                       Every {store.visit_frequency_days} days
                     </p>
                   )}
-                </div>
+                </button>
               )
             })}
           </div>

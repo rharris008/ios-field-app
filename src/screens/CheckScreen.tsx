@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { v4 as uuid } from 'uuid'
 import { useVisit } from '../contexts/VisitContext'
 import { useAuth } from '../contexts/AuthContext'
-import { searchStores, getPendingCounts } from '../lib/db'
+import { searchStores, getPendingCounts, db } from '../lib/db'
 import { getPosition } from '../lib/gps'
 import { supabase } from '../lib/supabase'
 import { ActiveVisitPanel } from '../components/visit/ActiveVisitPanel'
@@ -110,12 +111,20 @@ export function CheckScreen() {
   const { activeVisit, startVisit } = useVisit()
   const { repProfile, repBrands } = useAuth()
   const stats = useRepStats(repProfile?.id)
+  const location = useLocation()
 
   const [query,    setQuery]    = useState('')
   const [results,  setResults]  = useState<Store[]>([])
   const [selected, setSelected] = useState<Store | null>(null)
   const [visitType,setVisitType]= useState<VisitType>('physical')
   const [starting, setStarting] = useState(false)
+
+  // Handle preselect from StoreDetailScreen "Check In Here"
+  useEffect(() => {
+    const preId = (location.state as { preselectedStoreId?: string } | null)?.preselectedStoreId
+    if (!preId) return
+    db.stores.get(preId).then(s => { if (s) setSelected(s) })
+  }, [location.state])
 
   if (activeVisit) return <ActiveVisitPanel />
 
