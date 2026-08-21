@@ -5,6 +5,7 @@ import { SyncBanner } from './SyncBanner'
 export function Layout() {
   const { repProfile } = useAuth()
   const isManager = repProfile?.role === 'manager' || repProfile?.role === 'admin'
+  const isAdmin   = repProfile?.role === 'admin'
 
   return (
     <div className="flex flex-col min-h-screen bg-ios-ltgrey">
@@ -16,7 +17,8 @@ export function Layout() {
         <div className="flex">
           <TabItem to="/check"   icon="📋" label="Check" />
           <TabItem to="/history" icon="🕐" label="History" />
-          {!isManager && <TabItem to="/stores" icon="🏪" label="Stores" />}
+          {(!isManager || isAdmin) && <TabItem to="/stores"  icon="🏪" label="Stores"  />}
+          <TabItem to="/actions" icon="⚡" label="Actions" />
           {isManager && <TabItem to="/reports" icon="📊" label="Reports" />}
           {isManager && <TabItem to="/admin"   icon="👥" label="Admin" />}
           <TabItem to="/me" icon="👤" label="Me" />

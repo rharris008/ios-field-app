@@ -10,6 +10,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
 type DateRange = '7d' | '30d' | '90d'
+type ViewMode = 'store' | 'rep' | 'state'
 
 interface VisitRow {
   id: string
@@ -53,6 +54,27 @@ interface StoreSummary {
   followUps: number
 }
 
+interface RepSummary {
+  repId: string
+  repName: string
+  visitCount: number
+  storeCount: number
+  completedCount: number
+  avgDuration: number | null
+}
+
+interface StateSummary {
+  state: string
+  visitCount: number
+  storeCount: number
+  completedCount: number
+}
+
+interface RepProfile {
+  id: string
+  display_name: string
+}
+
 const RANGE_DAYS: Record<DateRange, number> = { '7d': 7, '30d': 30, '90d': 90 }
 
 const VIBE_SCORE: Record<string, number> = {
@@ -67,10 +89,12 @@ export function ReportsScreen() {
 
   const [range,       setRange]       = useState<DateRange>('30d')
   const [brandFilter, setBrandFilter] = useState<string>('')
+  const [viewMode,    setViewMode]    = useState<ViewMode>('store')
   const [loading,     setLoading]     = useState(false)
 
-  const [visits,    setVisits]    = useState<VisitRow[]>([])
-  const [feedbacks, setFeedbacks] = useState<FeedbackRow[]>([])
+  const [visits,     setVisits]     = useState<VisitRow[]>([])
+  const [feedbacks,  setFeedbacks]  = useState<FeedbackRow[]>([])
+  const [repProfiles,setRepProfiles] = useState<RepProfile[]>([])
 
   const isManager = repProfile?.role === 'manager' || repProfile?.role === 'admin'
 
@@ -127,6 +151,13 @@ export function ReportsScreen() {
         .in('visit_id', filteredVisitIds)
       fbData = (fd ?? []) as FeedbackRow[]
     }
+
+    // 4. Load rep profiles for By Rep view
+    const { data: repData } = await supabase
+      .from('ios_rep_profiles')
+      .select('id, display_name')
+      .eq('is_active', true)
+    setRepProfiles((repData ?? []) as RepProfile[])
 
     setVisits(filteredVisits)
     setFeedbacks(fbData)
@@ -201,6 +232,55 @@ export function ReportsScreen() {
   }
   const storeSummaries = [...storeMap.values()]
     .sort((a, b) => b.visitCount - a.visitCount)
+
+  // By Rep aggregation
+  const repMap = new Map<string, RepSummary>()
+  for (const v of visits) {
+    const rep = repProfiles.find(r => r.id === v.rep_id)
+    const repName = rep?.display_name ?? 'Unknown'
+    const existing = repMap.get(v.rep_id)
+    const storeId = v.ios_stores?.id ?? ''
+    if (!existing) {
+      repMap.set(v.rep_id, {
+        repId: v.rep_id, repName, visitCount: 1,
+        storeCount: storeId ? 1 : 0,
+        completedCount: v.checkout_at ? 1 : 0,
+        avgDuration: v.duration_minutes,
+      })
+    } else {
+      existing.visitCount++
+      if (storeId && !visits.slice(0, visits.indexOf(v)).some(pv => pv.rep_id === v.rep_id && pv.ios_stores?.id === storeId)) {
+        existing.storeCount++
+      }
+      if (v.checkout_at) existing.completedCount++
+      if (v.duration_minutes) {
+        existing.avgDuration = existing.avgDuration
+          ? Math.round((existing.avgDuration + v.duration_minutes) / 2)
+          : v.duration_minutes
+      }
+    }
+  }
+  const repSummaries = [...repMap.values()].sort((a, b) => b.visitCount - a.visitCount)
+
+  // By State aggregation
+  const stateMap = new Map<string, StateSummary>()
+  for (const v of visits) {
+    const state = v.ios_stores?.state ?? 'Unknown'
+    const storeId = v.ios_stores?.id ?? ''
+    const existing = stateMap.get(state)
+    if (!existing) {
+      stateMap.set(state, {
+        state, visitCount: 1, storeCount: storeId ? 1 : 0, completedCount: v.checkout_at ? 1 : 0,
+      })
+    } else {
+      existing.visitCount++
+      if (storeId && !visits.slice(0, visits.indexOf(v)).some(pv => pv.ios_stores?.state === state && pv.ios_stores?.id === storeId)) {
+        existing.storeCount++
+      }
+      if (v.checkout_at) existing.completedCount++
+    }
+  }
+  const stateSummaries = [...stateMap.values()].sort((a, b) => b.visitCount - a.visitCount)
 
   function formatDate(iso: string) {
     return new Date(iso).toLocaleDateString('en-AU', {
@@ -289,45 +369,104 @@ export function ReportsScreen() {
             </div>
           )}
 
-          {/* Per-store breakdown */}
-          {storeSummaries.length > 0 && (
-            <>
-              <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mt-2">
-                Store activity ({storeSummaries.length} stores)
-              </p>
-              <div className="space-y-2">
-                {storeSummaries.map(s => (
-                  <div key={s.storeId} className="bg-white rounded-lg px-4 py-3 border border-gray-200">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-bold text-ios-navy text-sm">
-                          {s.retailer} {s.storeName}
-                        </p>
-                        <p className="text-gray-500 text-xs">{s.suburb}, {s.state}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold text-ios-navy text-sm">{s.visitCount}</p>
-                        <p className="text-gray-400 text-xs">visit{s.visitCount !== 1 ? 's' : ''}</p>
-                      </div>
+          {/* View switcher */}
+          <div className="flex gap-2">
+            {(['store', 'rep', 'state'] as ViewMode[]).map(vm => (
+              <button
+                key={vm}
+                onClick={() => setViewMode(vm)}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold capitalize border ${
+                  viewMode === vm ? 'bg-ios-navy text-white border-ios-navy' : 'border-gray-300 text-gray-600'
+                }`}
+              >
+                By {vm === 'store' ? 'Store' : vm === 'rep' ? 'Rep' : 'State'}
+              </button>
+            ))}
+          </div>
+
+          {/* BY STORE */}
+          {viewMode === 'store' && storeSummaries.length > 0 && (
+            <div className="space-y-2">
+              {storeSummaries.map(s => (
+                <div key={s.storeId} className="bg-white rounded-lg px-4 py-3 border border-gray-200">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-bold text-ios-navy text-sm">{s.retailer} {s.storeName}</p>
+                      <p className="text-gray-500 text-xs">{s.suburb}, {s.state}</p>
                     </div>
-                    <div className="flex items-center justify-between mt-1.5">
-                      <p className="text-gray-400 text-xs">
-                        Last: {s.lastVisit ? formatDate(s.lastVisit) : 'N/A'}
-                        {s.avgDuration ? ` · ${s.avgDuration} min avg` : ''}
-                      </p>
-                      {s.followUps > 0 && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-                          {s.followUps} follow-up{s.followUps !== 1 ? 's' : ''}
-                        </span>
-                      )}
+                    <div className="text-right">
+                      <p className="font-bold text-ios-navy text-sm">{s.visitCount}</p>
+                      <p className="text-gray-400 text-xs">visit{s.visitCount !== 1 ? 's' : ''}</p>
                     </div>
                   </div>
-                ))}
-              </div>
-            </>
+                  <div className="flex items-center justify-between mt-1.5">
+                    <p className="text-gray-400 text-xs">
+                      Last: {s.lastVisit ? formatDate(s.lastVisit) : 'N/A'}
+                      {s.avgDuration ? ` · ${s.avgDuration} min avg` : ''}
+                    </p>
+                    {s.followUps > 0 && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                        {s.followUps} follow-up{s.followUps !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
 
-          {storeSummaries.length === 0 && !loading && (
+          {/* BY REP */}
+          {viewMode === 'rep' && repSummaries.length > 0 && (
+            <div className="space-y-2">
+              {repSummaries.map(r => {
+                const completionRate = r.visitCount > 0
+                  ? Math.round((r.completedCount / r.visitCount) * 100) : 0
+                return (
+                  <div key={r.repId} className="bg-white rounded-lg px-4 py-3 border border-gray-200">
+                    <div className="flex items-start justify-between">
+                      <p className="font-bold text-ios-navy text-sm">{r.repName}</p>
+                      <div className="text-right">
+                        <p className="font-bold text-ios-navy text-sm">{r.visitCount}</p>
+                        <p className="text-gray-400 text-xs">visits</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-4 mt-1.5">
+                      <p className="text-gray-500 text-xs">{r.storeCount} stores</p>
+                      <p className="text-gray-500 text-xs">Completion: {completionRate}%</p>
+                      {r.avgDuration && <p className="text-gray-500 text-xs">{r.avgDuration} min avg</p>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* BY STATE */}
+          {viewMode === 'state' && stateSummaries.length > 0 && (
+            <div className="space-y-2">
+              {stateSummaries.map(s => {
+                const completionRate = s.visitCount > 0
+                  ? Math.round((s.completedCount / s.visitCount) * 100) : 0
+                return (
+                  <div key={s.state} className="bg-white rounded-lg px-4 py-3 border border-gray-200">
+                    <div className="flex items-start justify-between">
+                      <p className="font-bold text-ios-navy text-sm">{s.state}</p>
+                      <div className="text-right">
+                        <p className="font-bold text-ios-navy text-sm">{s.visitCount}</p>
+                        <p className="text-gray-400 text-xs">visits</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-4 mt-1.5">
+                      <p className="text-gray-500 text-xs">{s.storeCount} stores</p>
+                      <p className="text-gray-500 text-xs">Completion: {completionRate}%</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {totalVisits === 0 && !loading && (
             <p className="text-gray-400 text-sm text-center py-8">No visits in this period.</p>
           )}
         </div>

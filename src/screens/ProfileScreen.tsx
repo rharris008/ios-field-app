@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { db } from '../lib/db'
 
 const ROLE_BADGE: Record<string, string> = {
   rep: 'bg-blue-100 text-blue-700',
@@ -11,11 +12,13 @@ const ROLE_BADGE: Record<string, string> = {
 const STATES = ['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT', 'National']
 
 export function ProfileScreen() {
-  const { repProfile, signOut } = useAuth()
+  const { repProfile, signOut, forceRefreshRefData, refDataLastSynced } = useAuth()
 
   const [editingState, setEditingState] = useState(false)
   const [stateVal,     setStateVal]     = useState(repProfile?.state_territory ?? '')
   const [savingState,  setSavingState]  = useState(false)
+  const [refreshing,   setRefreshing]   = useState(false)
+  const [storeCount,   setStoreCount]   = useState<number | null>(null)
 
   const [visitTotal, setVisitTotal]   = useState<number | null>(null)
   const [visit30,    setVisit30]      = useState<number | null>(null)
@@ -26,8 +29,17 @@ export function ProfileScreen() {
     if (repProfile) {
       setStateVal(repProfile.state_territory ?? '')
       loadStats()
+      db.stores.count().then(setStoreCount)
     }
   }, [repProfile])
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    await forceRefreshRefData()
+    const count = await db.stores.count()
+    setStoreCount(count)
+    setRefreshing(false)
+  }
 
   async function loadStats() {
     if (!repProfile) return
@@ -176,6 +188,38 @@ export function ProfileScreen() {
             </p>
           </div>
         )}
+
+        {/* Store data refresh */}
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wide">Store data</p>
+              <p className="text-sm font-bold text-ios-navy mt-0.5">
+                {storeCount !== null ? `${storeCount.toLocaleString()} stores cached` : 'Checking...'}
+              </p>
+              {refDataLastSynced && (
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Last synced: {new Date(refDataLastSynced).toLocaleString('en-AU', {
+                    timeZone: 'Australia/Brisbane',
+                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                  })}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="px-3 py-1.5 rounded-lg bg-ios-navy text-white text-xs font-bold disabled:opacity-50"
+            >
+              {refreshing ? 'Syncing...' : 'Refresh'}
+            </button>
+          </div>
+          {storeCount === 0 && (
+            <p className="text-amber-600 text-xs mt-1">
+              No stores cached. Run the store seed SQL in Supabase, then tap Refresh.
+            </p>
+          )}
+        </div>
 
         {/* Sign out */}
         <button

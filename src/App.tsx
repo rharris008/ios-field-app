@@ -14,6 +14,7 @@ import { StoresScreen } from './screens/StoresScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
 import { VisitDetailScreen } from './screens/VisitDetailScreen'
 import { ReportsScreen } from './screens/ReportsScreen'
+import { ActionsScreen } from './screens/ActionsScreen'
 
 export default function App() {
   return (
@@ -77,6 +78,7 @@ function AppRoutes() {
         <Route path="/check"   element={<CheckScreen />} />
         <Route path="/history" element={<HistoryScreen />} />
         <Route path="/stores"  element={<StoresScreen />} />
+        <Route path="/actions" element={<ActionsScreen />} />
         <Route path="/me"      element={<ProfileScreen />} />
         {isManager && (
           <>

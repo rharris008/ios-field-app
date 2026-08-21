@@ -19,6 +19,7 @@ interface AuthContextValue {
   retailers:  Retailer[]
   refDataLastSynced: string | null
   signOut: () => Promise<void>
+  forceRefreshRefData: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -65,6 +66,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     startSyncEngine()
   }, [session])
 
+  async function forceRefreshRefData() {
+    localStorage.removeItem('ios_ref_synced_at')
+    await loadRefData()
+  }
+
   async function loadRefData() {
     const lastSync = localStorage.getItem('ios_ref_synced_at')
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
@@ -87,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     await loadReferenceData(storeData, brandsRes.data as Brand[] ?? [], retailersRes.data as Retailer[] ?? [])
 
-    const now = new Date().toLocaleString('en-AU', { timeZone: 'Australia/Brisbane' })
+    const now = new Date().toISOString()
     localStorage.setItem('ios_ref_synced_at', now)
     setRefDataLastSynced(now)
   }
@@ -104,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       session, repProfile, loading, repLoading,
-      stores, brands, repBrands, retailers, refDataLastSynced, signOut,
+      stores, brands, repBrands, retailers, refDataLastSynced, signOut, forceRefreshRefData,
     }}>
       {children}
     </AuthContext.Provider>
