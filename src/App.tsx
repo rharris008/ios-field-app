@@ -11,6 +11,7 @@ import { CheckScreen } from './screens/CheckScreen'
 import { HistoryScreen } from './screens/HistoryScreen'
 import { AdminScreen } from './screens/AdminScreen'
 import { StoresScreen } from './screens/StoresScreen'
+import { ProfileScreen } from './screens/ProfileScreen'
 import { VisitDetailScreen } from './screens/VisitDetailScreen'
 import { ReportsScreen } from './screens/ReportsScreen'
 
@@ -76,10 +77,11 @@ function AppRoutes() {
         <Route path="/check"   element={<CheckScreen />} />
         <Route path="/history" element={<HistoryScreen />} />
         <Route path="/stores"  element={<StoresScreen />} />
+        <Route path="/me"      element={<ProfileScreen />} />
         {isManager && (
           <>
-            <Route path="/admin"   element={<AdminScreen />} />
             <Route path="/reports" element={<ReportsScreen />} />
+            <Route path="/admin"   element={<AdminScreen />} />
           </>
         )}
         <Route path="*" element={<Navigate to="/check" replace />} />

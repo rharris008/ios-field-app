@@ -16,9 +16,10 @@ export function Layout() {
         <div className="flex">
           <TabItem to="/check"   icon="📋" label="Check" />
           <TabItem to="/history" icon="🕐" label="History" />
-          <TabItem to="/stores"  icon="🏪" label="Stores" />
+          {!isManager && <TabItem to="/stores" icon="🏪" label="Stores" />}
           {isManager && <TabItem to="/reports" icon="📊" label="Reports" />}
           {isManager && <TabItem to="/admin"   icon="👥" label="Admin" />}
+          <TabItem to="/me" icon="👤" label="Me" />
         </div>
       </nav>
     </div>
