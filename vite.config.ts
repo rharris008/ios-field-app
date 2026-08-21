@@ -10,7 +10,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['ios-logo.png', 'pwa-192x192.png', 'pwa-512x512.png'],
+      includeAssets: ['ios-logo.png'],
       manifest: {
         name: 'IOS Field App',
         short_name: 'IOS Field',
@@ -22,8 +22,7 @@ export default defineConfig({
         scope: '/ios-field-app/',
         start_url: '/ios-field-app/',
         icons: [
-          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'ios-logo.png', sizes: 'any', type: 'image/png', purpose: 'any maskable' },
         ],
       },
       workbox: {

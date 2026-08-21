@@ -13,17 +13,20 @@ interface Props {
 }
 
 export function PhotoCapture({ activeVisit, onDone }: Props) {
-  const { repProfile } = useAuth()
+  const { repProfile, brands } = useAuth()
   const inputRef = useRef<HTMLInputElement>(null)
+
+  const activeBrands = brands.filter(b => activeVisit.brandIds.includes(b.id))
+  const [selectedBrandId, setSelectedBrandId] = useState<string | null>(
+    activeBrands[0]?.id ?? null
+  )
   const [category, setCategory] = useState<PhotoCategory>('merchandising')
   const [isBefore, setIsBefore] = useState(false)
-  const [isAfter, setIsAfter]   = useState(false)
-  const [groupId] = useState(() => uuid())
-  const [notes, setNotes] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const [count, setCount] = useState(0)
-
-  const selectedBrandId = activeVisit.brandIds[0] ?? null
+  const [isAfter,  setIsAfter]  = useState(false)
+  const [groupId]               = useState(() => uuid())
+  const [notes,    setNotes]    = useState('')
+  const [uploading,setUploading]= useState(false)
+  const [count,    setCount]    = useState(0)
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -34,7 +37,7 @@ export function PhotoCapture({ activeVisit, onDone }: Props) {
       const visitDate = new Date().toLocaleDateString('en-AU', {
         timeZone: 'Australia/Brisbane',
         year: 'numeric', month: '2-digit', day: '2-digit',
-      }).split('/').reverse().join('-')  // YYYY-MM-DD
+      }).split('/').reverse().join('-')
 
       await enqueuePhoto({
         localId:            uuid(),
@@ -63,6 +66,38 @@ export function PhotoCapture({ activeVisit, onDone }: Props) {
   return (
     <div className="p-4 space-y-4" style={{ fontFamily: 'Arial, sans-serif' }}>
       <h2 className="text-ios-navy font-bold text-base">Capture Photos</h2>
+
+      {/* Brand selector — only shown when multiple brands active */}
+      {activeBrands.length > 1 && (
+        <div>
+          <label className="block text-xs text-gray-500 mb-1.5">Brand</label>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedBrandId(null)}
+              className={`px-3 py-1.5 rounded-full text-xs border ${
+                !selectedBrandId
+                  ? 'bg-ios-navy text-white border-ios-navy'
+                  : 'border-gray-300 text-gray-700'
+              }`}
+            >
+              General
+            </button>
+            {activeBrands.map(b => (
+              <button
+                key={b.id}
+                onClick={() => setSelectedBrandId(b.id)}
+                className={`px-3 py-1.5 rounded-full text-xs border ${
+                  selectedBrandId === b.id
+                    ? 'bg-ios-blue text-white border-ios-blue'
+                    : 'border-gray-300 text-gray-700'
+                }`}
+              >
+                {b.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Category picker */}
       <div>
@@ -110,7 +145,6 @@ export function PhotoCapture({ activeVisit, onDone }: Props) {
         />
       </div>
 
-      {/* Camera trigger */}
       <input
         ref={inputRef}
         type="file"
@@ -134,10 +168,7 @@ export function PhotoCapture({ activeVisit, onDone }: Props) {
         </p>
       )}
 
-      <button
-        onClick={onDone}
-        className="w-full py-2 text-ios-blue text-sm font-bold"
-      >
+      <button onClick={onDone} className="w-full py-2 text-ios-blue text-sm font-bold">
         Done with photos
       </button>
     </div>
