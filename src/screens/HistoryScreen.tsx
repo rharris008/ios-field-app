@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -13,6 +14,7 @@ interface VisitRow {
 
 export function HistoryScreen() {
   const { session, repProfile } = useAuth()
+  const navigate = useNavigate()
   const [visits, setVisits]   = useState<VisitRow[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -65,7 +67,11 @@ export function HistoryScreen() {
           const store = v.ios_stores
           const retailer = store?.ios_retailers?.name ?? ''
           return (
-            <div key={v.id} className="bg-white rounded-lg px-4 py-3 border border-gray-200">
+            <button
+              key={v.id}
+              onClick={() => navigate(`/visit/${v.id}`)}
+              className="w-full bg-white rounded-lg px-4 py-3 border border-gray-200 text-left"
+            >
               <div className="flex items-start justify-between">
                 <div>
                   <p className="font-bold text-ios-navy text-sm">
@@ -88,7 +94,7 @@ export function HistoryScreen() {
                 {v.duration_minutes ? ` · ${v.duration_minutes} min` : ''}
                 {' · '}{v.visit_type}
               </p>
-            </div>
+            </button>
           )
         })}
       </div>

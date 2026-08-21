@@ -11,6 +11,8 @@ import { CheckScreen } from './screens/CheckScreen'
 import { HistoryScreen } from './screens/HistoryScreen'
 import { AdminScreen } from './screens/AdminScreen'
 import { StoresScreen } from './screens/StoresScreen'
+import { VisitDetailScreen } from './screens/VisitDetailScreen'
+import { ReportsScreen } from './screens/ReportsScreen'
 
 export default function App() {
   return (
@@ -49,17 +51,14 @@ function AppRoutes() {
     )
   }
 
-  // Rep exists but not activated yet
   if (!repProfile || !repProfile.is_active) {
     return <PendingActivation />
   }
 
-  // Terms not yet accepted
   if (!repProfile.terms_accepted_at && !termsAccepted) {
     return <TermsModal onAccepted={() => setTermsAccepted(true)} />
   }
 
-  // First-time onboarding
   if (!onboardingDone) {
     return <OnboardingModal onDone={() => setOnboardingDone(true)} />
   }
@@ -68,13 +67,20 @@ function AppRoutes() {
 
   return (
     <Routes>
+      {/* Full-screen routes (no bottom nav) */}
+      <Route path="/visit/:id" element={<VisitDetailScreen />} />
+
+      {/* Tab shell routes */}
       <Route element={<Layout />}>
         <Route path="/" element={<Navigate to="/check" replace />} />
         <Route path="/check"   element={<CheckScreen />} />
         <Route path="/history" element={<HistoryScreen />} />
         <Route path="/stores"  element={<StoresScreen />} />
         {isManager && (
-          <Route path="/admin" element={<AdminScreen />} />
+          <>
+            <Route path="/admin"   element={<AdminScreen />} />
+            <Route path="/reports" element={<ReportsScreen />} />
+          </>
         )}
         <Route path="*" element={<Navigate to="/check" replace />} />
       </Route>

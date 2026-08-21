@@ -92,10 +92,23 @@ export async function getPendingCounts() {
   return { visits, feedback, photos, total: visits + feedback + photos }
 }
 
+export async function getDeadLetterCounts(maxAttempts = 5) {
+  const [visits, feedback, photos] = await Promise.all([
+    db.pendingVisits.filter(v => v.attempts >= maxAttempts).count(),
+    db.pendingFeedback.filter(f => f.attempts >= maxAttempts).count(),
+    db.pendingPhotos.filter(p => p.attempts >= maxAttempts).count(),
+  ])
+  return visits + feedback + photos
+}
+
 export async function markVisitAttempt(localId: string) {
   await db.pendingVisits.where('localId').equals(localId).modify(v => { v.attempts += 1 })
 }
 
 export async function markPhotoAttempt(localId: string) {
   await db.pendingPhotos.where('localId').equals(localId).modify(p => { p.attempts += 1 })
+}
+
+export async function markFeedbackAttempt(localId: string) {
+  await db.pendingFeedback.where('localId').equals(localId).modify(f => { f.attempts += 1 })
 }

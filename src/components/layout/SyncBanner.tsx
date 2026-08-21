@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react'
-import { getPendingCounts } from '../../lib/db'
+import { getPendingCounts, getDeadLetterCounts } from '../../lib/db'
 import { onSyncChange, drainQueue } from '../../lib/sync'
 
 export function SyncBanner() {
-  const [counts, setCounts] = useState({ visits: 0, photos: 0 })
-  const [syncing, setSyncing] = useState(false)
-  const [online, setOnline] = useState(navigator.onLine)
+  const [total,      setTotal]      = useState(0)
+  const [deadLetter, setDeadLetter] = useState(0)
+  const [syncing,    setSyncing]    = useState(false)
+  const [online,     setOnline]     = useState(navigator.onLine)
 
   useEffect(() => {
     refresh()
     const unsub = onSyncChange(() => { setSyncing(false); refresh() })
-    const onOnline  = () => setOnline(true)
+    const onOnline  = () => { setOnline(true);  refresh() }
     const onOffline = () => setOnline(false)
     window.addEventListener('online',  onOnline)
     window.addEventListener('offline', onOffline)
@@ -22,26 +23,33 @@ export function SyncBanner() {
   }, [])
 
   async function refresh() {
-    const c = await getPendingCounts()
-    setCounts(c)
+    const [counts, dead] = await Promise.all([
+      getPendingCounts(),
+      getDeadLetterCounts(),
+    ])
+    setTotal(counts.total)
+    setDeadLetter(dead)
   }
 
-  const total = counts.visits + counts.photos
-  if (total === 0 && online) return null
+  if (total === 0 && online && deadLetter === 0) return null
+
+  const showDead = deadLetter > 0
 
   return (
     <div
       className={`flex items-center justify-between px-4 py-2 text-xs text-white ${
-        online ? 'bg-ios-amber' : 'bg-ios-red'
+        !online ? 'bg-ios-red' : showDead ? 'bg-ios-red' : 'bg-ios-amber'
       }`}
       style={{ fontFamily: 'Arial, sans-serif' }}
     >
       <span>
-        {online
-          ? `${total} item${total !== 1 ? 's' : ''} pending sync`
-          : 'Offline — data will sync when you reconnect'}
+        {!online
+          ? 'Offline — data will sync when you reconnect'
+          : showDead
+            ? `${deadLetter} item${deadLetter !== 1 ? 's' : ''} failed to sync`
+            : `${total} item${total !== 1 ? 's' : ''} pending sync`}
       </span>
-      {online && total > 0 && (
+      {online && total > 0 && !showDead && (
         <button
           onClick={() => { setSyncing(true); drainQueue() }}
           disabled={syncing}

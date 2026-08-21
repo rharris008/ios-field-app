@@ -12,13 +12,13 @@ export function Layout() {
       <main className="flex-1 overflow-y-auto pb-20">
         <Outlet />
       </main>
-      {/* Bottom tab bar */}
       <nav className="fixed bottom-0 left-0 right-0 bg-ios-navy border-t border-ios-navylight safe-bottom z-40">
         <div className="flex">
-          <TabItem to="/check" icon="📋" label="Check" />
+          <TabItem to="/check"   icon="📋" label="Check" />
           <TabItem to="/history" icon="🕐" label="History" />
-          {isManager && <TabItem to="/admin" icon="📊" label="Admin" />}
-          <TabItem to="/stores" icon="🏪" label="Stores" />
+          <TabItem to="/stores"  icon="🏪" label="Stores" />
+          {isManager && <TabItem to="/reports" icon="📊" label="Reports" />}
+          {isManager && <TabItem to="/admin"   icon="👥" label="Admin" />}
         </div>
       </nav>
     </div>
