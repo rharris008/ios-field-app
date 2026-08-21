@@ -1,0 +1,80 @@
+import { useState } from 'react'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { LoginPage } from './components/auth/LoginPage'
+import { PendingActivation } from './components/auth/PendingActivation'
+import { TermsModal } from './components/terms/TermsModal'
+import { OnboardingModal } from './components/onboarding/OnboardingModal'
+import { Layout } from './components/layout/Layout'
+import { CheckScreen } from './screens/CheckScreen'
+import { HistoryScreen } from './screens/HistoryScreen'
+import { AdminScreen } from './screens/AdminScreen'
+import { StoresScreen } from './screens/StoresScreen'
+
+export default function App() {
+  return (
+    <HashRouter>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </HashRouter>
+  )
+}
+
+function AppRoutes() {
+  const { session, repProfile, loading, repLoading } = useAuth()
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const [onboardingDone, setOnboardingDone] = useState(
+    () => localStorage.getItem('ios_onboarding_done') === '1'
+  )
+
+  if (loading || (session && repLoading)) {
+    return (
+      <div className="min-h-screen bg-ios-navy flex items-center justify-center">
+        <div className="text-white text-sm" style={{ fontFamily: 'Arial, sans-serif' }}>
+          Loading...
+        </div>
+      </div>
+    )
+  }
+
+  if (!session) {
+    return (
+      <Routes>
+        <Route path="*" element={<LoginPage />} />
+      </Routes>
+    )
+  }
+
+  // Rep exists but not activated yet
+  if (!repProfile || !repProfile.is_active) {
+    return <PendingActivation />
+  }
+
+  // Terms not yet accepted
+  if (!repProfile.terms_accepted_at && !termsAccepted) {
+    return <TermsModal onAccepted={() => setTermsAccepted(true)} />
+  }
+
+  // First-time onboarding
+  if (!onboardingDone) {
+    return <OnboardingModal onDone={() => setOnboardingDone(true)} />
+  }
+
+  const isManager = repProfile.role === 'manager' || repProfile.role === 'admin'
+
+  return (
+    <Routes>
+      <Route element={<Layout />}>
+        <Route path="/" element={<Navigate to="/check" replace />} />
+        <Route path="/check"   element={<CheckScreen />} />
+        <Route path="/history" element={<HistoryScreen />} />
+        <Route path="/stores"  element={<StoresScreen />} />
+        {isManager && (
+          <Route path="/admin" element={<AdminScreen />} />
+        )}
+        <Route path="*" element={<Navigate to="/check" replace />} />
+      </Route>
+    </Routes>
+  )
+}
