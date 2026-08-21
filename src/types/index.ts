@@ -66,6 +66,7 @@ export interface OfflineVisit {
   checkoutLng: number | null
   durationMinutes: number | null
   brandIds: string[]
+  callNotes: string | null
   attempts: number
   lastAttempt: string | null
 }

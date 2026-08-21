@@ -58,6 +58,7 @@ async function drainVisits() {
         checkout_gps_lat:    item.checkoutLat,
         checkout_gps_lng:    item.checkoutLng,
         duration_minutes:    item.durationMinutes,
+        call_notes:          item.callNotes ?? null,
         synced_from_offline: true,
       })
       if (!error || (error as { code?: string }).code === '23505') {

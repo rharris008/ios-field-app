@@ -7,6 +7,7 @@ export interface ActiveVisit {
   store:     Store
   visitType: VisitType
   brandIds:  string[]
+  callNotes: string
   checkinAt: string
   checkinLat: number | null
   checkinLng: number | null
@@ -14,11 +15,12 @@ export interface ActiveVisit {
 }
 
 interface VisitContextValue {
-  activeVisit: ActiveVisit | null
-  startVisit:  (v: ActiveVisit) => void
-  endVisit:    () => void
-  addBrand:    (brandId: string) => void
-  removeBrand: (brandId: string) => void
+  activeVisit:     ActiveVisit | null
+  startVisit:      (v: ActiveVisit) => void
+  endVisit:        () => void
+  addBrand:        (brandId: string) => void
+  removeBrand:     (brandId: string) => void
+  updateCallNotes: (notes: string) => void
 }
 
 const VisitContext = createContext<VisitContextValue | null>(null)
@@ -70,8 +72,17 @@ export function VisitProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
+  const updateCallNotes = useCallback((notes: string) => {
+    setActiveVisit(prev => {
+      if (!prev) return prev
+      const next = { ...prev, callNotes: notes }
+      save(next)
+      return next
+    })
+  }, [])
+
   return (
-    <VisitContext.Provider value={{ activeVisit, startVisit, endVisit, addBrand, removeBrand }}>
+    <VisitContext.Provider value={{ activeVisit, startVisit, endVisit, addBrand, removeBrand, updateCallNotes }}>
       {children}
     </VisitContext.Provider>
   )

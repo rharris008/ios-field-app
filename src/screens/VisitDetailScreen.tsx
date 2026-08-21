@@ -9,6 +9,7 @@ interface VisitDetail {
   checkout_at: string | null
   duration_minutes: number | null
   visit_type: string
+  call_notes: string | null
   synced_from_offline: boolean
   ios_stores: {
     name: string
@@ -80,7 +81,7 @@ export function VisitDetailScreen() {
     const [visitRes, feedbackRes, photosRes] = await Promise.all([
       supabase
         .from('ios_visits')
-        .select('id, checkin_at, checkout_at, duration_minutes, visit_type, synced_from_offline, ios_stores(name, suburb, state, store_number, ios_retailers(name)), ios_rep_profiles(full_name)')
+        .select('id, checkin_at, checkout_at, duration_minutes, visit_type, call_notes, synced_from_offline, ios_stores(name, suburb, state, store_number, ios_retailers(name)), ios_rep_profiles(full_name)')
         .eq('id', visitId)
         .single(),
       supabase
@@ -202,6 +203,12 @@ export function VisitDetailScreen() {
               </>
             )}
             <InfoCard label="Visit type" value={visit.visit_type === 'physical' ? '📍 Physical' : '💻 Remote'} />
+            {visit.call_notes && (
+              <div className="bg-white rounded-lg px-4 py-3 border border-gray-200">
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Call notes</p>
+                <p className="text-sm text-ios-navy whitespace-pre-wrap">{visit.call_notes}</p>
+              </div>
+            )}
             {feedback && (
               <InfoCard
                 label="Follow-up required"

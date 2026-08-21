@@ -146,6 +146,7 @@ export function CheckScreen() {
       store:      s,
       visitType,
       brandIds:   repBrands.map(b => b.id),
+      callNotes:  '',
       checkinAt:  now,
       checkinLat: pos?.lat ?? null,
       checkinLng: pos?.lng ?? null,
