@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { VisitProvider } from './contexts/VisitContext'
 import { LoginPage } from './components/auth/LoginPage'
@@ -31,6 +31,7 @@ export default function App() {
 
 function AppRoutes() {
   const { session, repProfile, loading, repLoading } = useAuth()
+  const navigate = useNavigate()
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [onboardingDone, setOnboardingDone] = useState(
     () => localStorage.getItem('ios_onboarding_done') === '1'
@@ -59,11 +60,11 @@ function AppRoutes() {
   }
 
   if (!repProfile.terms_accepted_at && !termsAccepted) {
-    return <TermsModal onAccepted={() => setTermsAccepted(true)} />
+    return <TermsModal onAccepted={() => { setTermsAccepted(true); navigate('/check', { replace: true }) }} />
   }
 
   if (!onboardingDone) {
-    return <OnboardingModal onDone={() => setOnboardingDone(true)} />
+    return <OnboardingModal onDone={() => { setOnboardingDone(true); navigate('/check', { replace: true }) }} />
   }
 
   const isManager = repProfile.role === 'manager' || repProfile.role === 'admin'
