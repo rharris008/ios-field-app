@@ -27,14 +27,14 @@ export function HistoryScreen() {
 
   async function load() {
     setLoading(true)
-    const query = supabase
+    let query = supabase
       .from('ios_visits')
       .select('id, checkin_at, checkout_at, duration_minutes, visit_type, ios_stores(name, suburb, state, ios_retailers(name))')
       .order('checkin_at', { ascending: false })
       .limit(50)
 
     if (!isManager) {
-      query.eq('rep_id', session!.user.id)
+      query = query.eq('rep_id', session!.user.id)
     }
 
     const { data } = await query

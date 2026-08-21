@@ -30,14 +30,14 @@ export function StoresScreen() {
   async function loadLastVisits(storeIds: string[]) {
     if (storeIds.length === 0) return
     // Get the most recent visit per store
-    const query = supabase
+    let query = supabase
       .from('ios_visits')
       .select('store_id, checkin_at, duration_minutes')
       .in('store_id', storeIds)
       .order('checkin_at', { ascending: false })
 
     if (!isManager && repProfile) {
-      query.eq('rep_id', repProfile.id)
+      query = query.eq('rep_id', repProfile.id)
     }
 
     const { data } = await query
