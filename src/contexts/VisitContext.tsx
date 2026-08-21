@@ -8,6 +8,8 @@ export interface ActiveVisit {
   visitType: VisitType
   brandIds:  string[]
   callNotes: string
+  contactName: string
+  contactMethod: string
   checkinAt: string
   checkinLat: number | null
   checkinLng: number | null
@@ -15,12 +17,14 @@ export interface ActiveVisit {
 }
 
 interface VisitContextValue {
-  activeVisit:     ActiveVisit | null
-  startVisit:      (v: ActiveVisit) => void
-  endVisit:        () => void
-  addBrand:        (brandId: string) => void
-  removeBrand:     (brandId: string) => void
-  updateCallNotes: (notes: string) => void
+  activeVisit:        ActiveVisit | null
+  startVisit:         (v: ActiveVisit) => void
+  endVisit:           () => void
+  addBrand:           (brandId: string) => void
+  removeBrand:        (brandId: string) => void
+  updateCallNotes:    (notes: string) => void
+  updateContactName:  (name: string) => void
+  updateContactMethod:(method: string) => void
 }
 
 const VisitContext = createContext<VisitContextValue | null>(null)
@@ -81,8 +85,29 @@ export function VisitProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
+  const updateContactName = useCallback((name: string) => {
+    setActiveVisit(prev => {
+      if (!prev) return prev
+      const next = { ...prev, contactName: name }
+      save(next)
+      return next
+    })
+  }, [])
+
+  const updateContactMethod = useCallback((method: string) => {
+    setActiveVisit(prev => {
+      if (!prev) return prev
+      const next = { ...prev, contactMethod: method }
+      save(next)
+      return next
+    })
+  }, [])
+
   return (
-    <VisitContext.Provider value={{ activeVisit, startVisit, endVisit, addBrand, removeBrand, updateCallNotes }}>
+    <VisitContext.Provider value={{
+      activeVisit, startVisit, endVisit, addBrand, removeBrand,
+      updateCallNotes, updateContactName, updateContactMethod,
+    }}>
       {children}
     </VisitContext.Provider>
   )

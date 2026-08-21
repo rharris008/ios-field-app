@@ -15,7 +15,19 @@ interface AssignedStore {
   name: string
   suburb: string
   state: string
+  latitude: number | null
+  longitude: number | null
   visitedThisWeek: boolean
+  lastVisitDays: number | null
+  distanceKm: number | null
+}
+
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.asin(Math.sqrt(a))
 }
 
 interface PendingCount {
@@ -48,10 +60,42 @@ export function CheckScreen() {
   const [visitType,      setVisitType]      = useState<VisitType>('physical')
   const [starting,       setStarting]       = useState(false)
   const [assignedStores, setAssignedStores] = useState<AssignedStore[]>([])
+  const [sortedStores,   setSortedStores]   = useState<AssignedStore[]>([])
   const [todayCount,     setTodayCount]     = useState<number>(0)
   const [weekCount,      setWeekCount]      = useState<number>(0)
   const [pending,        setPending]        = useState<PendingCount>({ total: 0 })
   const [statsLoaded,    setStatsLoaded]    = useState(false)
+  const [repLat,         setRepLat]         = useState<number | null>(null)
+  const [repLng,         setRepLng]         = useState<number | null>(null)
+
+  // Request GPS permission immediately on mount
+  useEffect(() => {
+    if (!navigator.geolocation) return
+    navigator.geolocation.getCurrentPosition(
+      pos => { setRepLat(pos.coords.latitude); setRepLng(pos.coords.longitude) },
+      () => {},
+      { enableHighAccuracy: true, timeout: 12000 }
+    )
+  }, [])
+
+  // Re-sort stores whenever location or stores list changes
+  useEffect(() => {
+    if (assignedStores.length === 0) { setSortedStores([]); return }
+    const withDist = assignedStores.map(s => ({
+      ...s,
+      distanceKm: repLat !== null && repLng !== null && s.latitude !== null && s.longitude !== null
+        ? haversineKm(repLat, repLng, s.latitude, s.longitude)
+        : null,
+    }))
+    withDist.sort((a, b) => {
+      if (a.visitedThisWeek !== b.visitedThisWeek) return a.visitedThisWeek ? 1 : -1
+      if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm
+      if (a.distanceKm !== null) return -1
+      if (b.distanceKm !== null) return 1
+      return a.retailer_name.localeCompare(b.retailer_name) || a.name.localeCompare(b.name)
+    })
+    setSortedStores(withDist)
+  }, [assignedStores, repLat, repLng])
 
   // Preselect from StoreDetailScreen "Check In Here"
   useEffect(() => {
@@ -71,38 +115,58 @@ export function CheckScreen() {
     const weekStart = aestWeekStart()
     const { data } = await supabase
       .from('ios_rep_stores')
-      .select('store_id, ios_stores(id, name, suburb, state, ios_retailers(name))')
+      .select('store_id, ios_stores(id, name, suburb, state, latitude, longitude, ios_retailers(name))')
       .eq('rep_id', repId)
 
-    type Row = { store_id: string; ios_stores: { id: string; name: string; suburb: string; state: string; ios_retailers: { name: string } | null } | null }
+    type Row = {
+      store_id: string
+      ios_stores: {
+        id: string; name: string; suburb: string; state: string
+        latitude: number | null; longitude: number | null
+        ios_retailers: { name: string } | null
+      } | null
+    }
     const rows = (data ?? []) as unknown as Row[]
     const storeIds = rows.map(r => r.store_id)
 
     let visitedThisWeek = new Set<string>()
+    let lastVisitMap = new Map<string, string>()
     if (storeIds.length > 0) {
-      const { data: wv } = await supabase
-        .from('ios_visits')
-        .select('store_id')
-        .eq('rep_id', repId)
-        .gte('checkin_at', `${weekStart}T00:00:00+10:00`)
-        .in('store_id', storeIds)
-      visitedThisWeek = new Set((wv ?? []).map((v: { store_id: string }) => v.store_id))
+      const [weekRes, lastRes] = await Promise.all([
+        supabase.from('ios_visits').select('store_id')
+          .eq('rep_id', repId)
+          .gte('checkin_at', `${weekStart}T00:00:00+10:00`)
+          .in('store_id', storeIds),
+        supabase.from('ios_visits').select('store_id, checkin_at')
+          .eq('rep_id', repId)
+          .in('store_id', storeIds)
+          .order('checkin_at', { ascending: false }),
+      ])
+      visitedThisWeek = new Set((weekRes.data ?? []).map((v: { store_id: string }) => v.store_id))
+      for (const v of (lastRes.data ?? []) as Array<{ store_id: string; checkin_at: string }>) {
+        if (!lastVisitMap.has(v.store_id)) lastVisitMap.set(v.store_id, v.checkin_at)
+      }
     }
 
     const stores: AssignedStore[] = rows
       .filter(r => r.ios_stores)
-      .map(r => ({
-        id:              r.ios_stores!.id,
-        retailer_name:   r.ios_stores!.ios_retailers?.name ?? '',
-        name:            r.ios_stores!.name,
-        suburb:          r.ios_stores!.suburb,
-        state:           r.ios_stores!.state,
-        visitedThisWeek: visitedThisWeek.has(r.store_id),
-      }))
-      // Not-visited-yet first, then alphabetical within each group
-      .sort((a, b) => {
-        if (a.visitedThisWeek !== b.visitedThisWeek) return a.visitedThisWeek ? 1 : -1
-        return a.retailer_name.localeCompare(b.retailer_name) || a.name.localeCompare(b.name)
+      .map(r => {
+        const lastIso = lastVisitMap.get(r.store_id)
+        const lastDays = lastIso
+          ? Math.floor((Date.now() - new Date(lastIso).getTime()) / 86400000)
+          : null
+        return {
+          id:              r.ios_stores!.id,
+          retailer_name:   r.ios_stores!.ios_retailers?.name ?? '',
+          name:            r.ios_stores!.name,
+          suburb:          r.ios_stores!.suburb,
+          state:           r.ios_stores!.state,
+          latitude:        r.ios_stores!.latitude,
+          longitude:       r.ios_stores!.longitude,
+          visitedThisWeek: visitedThisWeek.has(r.store_id),
+          lastVisitDays:   lastDays,
+          distanceKm:      null,
+        }
       })
 
     setAssignedStores(stores)
@@ -147,15 +211,17 @@ export function CheckScreen() {
     const pos = visitType !== 'remote' ? await getPosition() : null
     const now = new Date().toISOString()
     startVisit({
-      localId:    uuid(),
-      store:      storeObj,
+      localId:       uuid(),
+      store:         storeObj,
       visitType,
-      brandIds:   repBrands.map(b => b.id),
-      callNotes:  '',
-      checkinAt:  now,
-      checkinLat: pos?.lat ?? null,
-      checkinLng: pos?.lng ?? null,
-      repId:      repProfile.id,
+      brandIds:      repBrands.map(b => b.id),
+      callNotes:     '',
+      contactName:   '',
+      contactMethod: '',
+      checkinAt:     now,
+      checkinLat:    pos?.lat ?? null,
+      checkinLng:    pos?.lng ?? null,
+      repId:         repProfile.id,
     })
     setStarting(false)
   }
@@ -295,17 +361,18 @@ export function CheckScreen() {
             ) : (
               <>
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wide px-1">
-                  Your stores ({assignedStores.length})
+                  Your stores ({sortedStores.length})
+                  {repLat !== null && <span className="ml-1 font-normal normal-case">· sorted by distance</span>}
                 </p>
                 <div className="space-y-2">
-                  {assignedStores.map(store => (
+                  {sortedStores.map(store => (
                     <button
                       key={store.id}
                       onClick={() => setSelected({
                         id: store.id, name: store.name, suburb: store.suburb,
                         state: store.state, retailer_name: store.retailer_name,
                         retailer_id: '', is_active: true, postcode: null,
-                        latitude: null, longitude: null, store_number: null,
+                        latitude: store.latitude, longitude: store.longitude, store_number: null,
                         address: null, visit_frequency_days: null,
                       } as Store)}
                       className={`w-full bg-white rounded-xl px-4 py-3.5 border text-left shadow-sm flex items-center justify-between ${
@@ -314,13 +381,30 @@ export function CheckScreen() {
                           : 'border-gray-200 border-l-4 border-l-ios-blue'
                       }`}
                     >
-                      <div>
+                      <div className="flex-1 min-w-0">
                         <p className="font-bold text-ios-navy text-sm">
                           {store.retailer_name} {store.name}
                         </p>
                         <p className="text-gray-500 text-xs mt-0.5">
                           {store.suburb}, {store.state}
                         </p>
+                        <div className="flex gap-2 mt-1">
+                          {store.distanceKm !== null && (
+                            <span className="text-ios-blue text-xs">
+                              {store.distanceKm < 1
+                                ? `${Math.round(store.distanceKm * 1000)}m away`
+                                : `${store.distanceKm.toFixed(1)} km`}
+                            </span>
+                          )}
+                          {store.lastVisitDays !== null && (
+                            <span className={`text-xs ${store.lastVisitDays > 14 ? 'text-amber-500 font-bold' : 'text-gray-400'}`}>
+                              {store.lastVisitDays === 0 ? 'visited today' : `${store.lastVisitDays}d ago`}
+                            </span>
+                          )}
+                          {store.lastVisitDays === null && (
+                            <span className="text-xs text-red-400 font-bold">never visited</span>
+                          )}
+                        </div>
                       </div>
                       {store.visitedThisWeek ? (
                         <span className="text-green-600 text-xs font-bold shrink-0 ml-2">Done ✓</span>

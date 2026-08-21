@@ -16,6 +16,7 @@ import { VisitDetailScreen } from './screens/VisitDetailScreen'
 import { StoreDetailScreen } from './screens/StoreDetailScreen'
 import { ReportsScreen } from './screens/ReportsScreen'
 import { ActionsScreen } from './screens/ActionsScreen'
+import { RouteScreen } from './screens/RouteScreen'
 
 export default function App() {
   return (
@@ -79,6 +80,7 @@ function AppRoutes() {
       <Route element={<Layout />}>
         <Route path="/" element={<Navigate to="/check" replace />} />
         <Route path="/check"   element={<CheckScreen />} />
+        <Route path="/route"   element={<RouteScreen />} />
         <Route path="/history" element={<HistoryScreen />} />
         <Route path="/stores"  element={<StoresScreen />} />
         <Route path="/actions" element={<ActionsScreen />} />

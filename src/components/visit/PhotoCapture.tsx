@@ -116,7 +116,7 @@ export function PhotoCapture({ activeVisit, onDone }: Props) {
       {/* Before / After toggles */}
       <div className="flex gap-3">
         <button
-          onClick={() => setIsBefore(b => !b)}
+          onClick={() => { const next = !isBefore; setIsBefore(next); if (next) setIsAfter(false) }}
           className={`flex-1 py-2 rounded-lg text-sm font-bold border ${
             isBefore ? 'bg-ios-blue text-white border-ios-blue' : 'border-gray-300 text-gray-600'
           }`}
@@ -124,7 +124,7 @@ export function PhotoCapture({ activeVisit, onDone }: Props) {
           Before
         </button>
         <button
-          onClick={() => setIsAfter(a => !a)}
+          onClick={() => { const next = !isAfter; setIsAfter(next); if (next) setIsBefore(false) }}
           className={`flex-1 py-2 rounded-lg text-sm font-bold border ${
             isAfter ? 'bg-ios-blue text-white border-ios-blue' : 'border-gray-300 text-gray-600'
           }`}

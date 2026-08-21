@@ -67,6 +67,8 @@ export interface OfflineVisit {
   durationMinutes: number | null
   brandIds: string[]
   callNotes: string | null
+  contactName?: string | null
+  contactMethod?: string | null
   attempts: number
   lastAttempt: string | null
 }

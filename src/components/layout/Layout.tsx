@@ -16,6 +16,7 @@ export function Layout() {
       <nav className="fixed bottom-0 left-0 right-0 bg-ios-navy border-t border-ios-navylight safe-bottom z-40">
         <div className="flex">
           <TabItem to="/check"   icon="📋" label="Check" />
+          <TabItem to="/route"   icon="🗺️" label="Route" />
           <TabItem to="/history" icon="🕐" label="History" />
           {(!isManager || isAdmin) && <TabItem to="/stores"  icon="🏪" label="Stores"  />}
           <TabItem to="/actions" icon="⚡" label="Actions" />

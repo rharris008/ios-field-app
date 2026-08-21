@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { db } from '../lib/db'
 import type { Store } from '../types'
 
-type StoreTab = 'visits' | 'contacts' | 'notes'
+type StoreTab = 'visits' | 'contacts' | 'notes' | 'actions'
 
 interface VisitRow {
   id: string
@@ -39,6 +39,16 @@ interface StoreNote {
   ios_rep_profiles?: { full_name: string } | null
 }
 
+interface StoreAction {
+  id: string
+  store_id: string
+  title: string
+  description: string | null
+  status: string
+  due_date: string | null
+  ios_rep_profiles?: { full_name: string } | null
+}
+
 export function StoreDetailScreen() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -49,9 +59,11 @@ export function StoreDetailScreen() {
   const [visits,    setVisits]   = useState<VisitRow[]>([])
   const [contacts,  setContacts] = useState<Contact[]>([])
   const [notes,     setNotes]    = useState<StoreNote[]>([])
+  const [actions,   setActions]  = useState<StoreAction[]>([])
   const [loading,   setLoading]  = useState(true)
   const [contactErr, setContactErr] = useState(false)
   const [noteErr,    setNoteErr]    = useState(false)
+  const [actionErr,  setActionErr]  = useState(false)
 
   // Add contact form state
   const [addingContact, setAddingContact] = useState(false)
@@ -75,6 +87,7 @@ export function StoreDetailScreen() {
     loadVisits(id)
     loadContacts(id)
     loadNotes(id)
+    loadActions(id)
   }, [id])
 
   async function loadStore(storeId: string) {
@@ -123,8 +136,19 @@ export function StoreDetailScreen() {
       .select('id, store_id, author_id, note, created_at, ios_rep_profiles(full_name)')
       .eq('store_id', storeId)
       .order('created_at', { ascending: false })
-    if (error && error.code === '42P01') { setNoteErr(true); return } // table not yet created
+    if (error && error.code === '42P01') { setNoteErr(true); return }
     setNotes((data ?? []) as unknown as StoreNote[])
+  }
+
+  async function loadActions(storeId: string) {
+    const { data, error } = await supabase
+      .from('ios_actions')
+      .select('id, store_id, title, description, status, due_date, ios_rep_profiles(full_name)')
+      .eq('store_id', storeId)
+      .neq('status', 'resolved')
+      .order('due_date', { ascending: true })
+    if (error && error.code === '42P01') { setActionErr(true); return }
+    setActions((data ?? []) as unknown as StoreAction[])
   }
 
   async function saveContact() {
@@ -219,10 +243,12 @@ export function StoreDetailScreen() {
   const lastDays = lastVisitDays()
   const overdue = store.visit_frequency_days && lastDays !== null && lastDays > store.visit_frequency_days
 
+  const openActionCount = actions.filter(a => a.status !== 'resolved').length
   const TABS: [StoreTab, string][] = [
     ['visits',   `Visits${visits.length > 0 ? ` (${visits.length})` : ''}`],
     ['contacts', `Contacts${contacts.length > 0 ? ` (${contacts.length})` : ''}`],
     ['notes',    `Notes${notes.length > 0 ? ` (${notes.length})` : ''}`],
+    ['actions',  `Actions${openActionCount > 0 ? ` (${openActionCount})` : ''}`],
   ]
 
   return (
@@ -400,9 +426,60 @@ export function StoreDetailScreen() {
           </>
         )}
 
+        {/* ACTIONS TAB */}
+        {tab === 'actions' && (
+          <>
+            {actionErr ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-4">
+                <p className="text-amber-700 text-sm font-bold">Actions table not set up yet</p>
+                <p className="text-amber-600 text-xs mt-1">Run the actions migration in Supabase first.</p>
+              </div>
+            ) : actions.length === 0 ? (
+              <p className="text-gray-400 text-sm text-center py-8">No open actions for this store.</p>
+            ) : (
+              actions.map(a => {
+                const statusColour: Record<string, string> = {
+                  identified: 'bg-gray-100 text-gray-600',
+                  assigned:   'bg-blue-100 text-blue-700',
+                  in_progress:'bg-amber-100 text-amber-700',
+                  resolved:   'bg-green-100 text-green-700',
+                }
+                return (
+                  <div key={a.id} className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <p className="font-bold text-ios-navy text-sm">{a.title}</p>
+                        {a.description && (
+                          <p className="text-gray-500 text-xs mt-0.5">{a.description}</p>
+                        )}
+                        <div className="flex gap-2 mt-1.5 items-center">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${statusColour[a.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                            {a.status.replace('_', ' ')}
+                          </span>
+                          {a.due_date && (
+                            <span className="text-xs text-gray-400">Due {formatShortDate(a.due_date)}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {a.ios_rep_profiles && (
+                      <p className="text-gray-400 text-xs mt-1.5">Assigned to {a.ios_rep_profiles.full_name}</p>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </>
+        )}
+
         {/* NOTES TAB */}
         {tab === 'notes' && (
           <>
+            {/* INTERNAL ONLY warning */}
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
+              <span className="text-red-500 text-base">🔒</span>
+              <p className="text-red-700 text-xs font-bold uppercase tracking-wide">Internal only — never share with clients or retailers</p>
+            </div>
             {noteErr ? (
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-4">
                 <p className="text-amber-700 text-sm font-bold">Store notes table not set up yet</p>

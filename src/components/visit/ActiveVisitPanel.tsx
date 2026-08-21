@@ -22,8 +22,10 @@ const SURVEY_PANELS: Array<{ key: Panel; icon: string; label: string }> = [
   { key: 'competitor',    icon: '🔍', label: 'Competitor' },
 ]
 
+const CALL_METHODS = ['Phone', 'Video', 'Email', 'In-person (unscheduled)']
+
 export function ActiveVisitPanel() {
-  const { activeVisit, endVisit, addBrand, removeBrand, updateCallNotes, brands } = useActiveVisitBrands()
+  const { activeVisit, endVisit, addBrand, removeBrand, updateCallNotes, updateContactName, updateContactMethod, brands } = useActiveVisitBrands()
   const { repProfile } = useAuth()
   const [panel,        setPanel]        = useState<Panel>('home')
   const [checkingOut,  setCheckingOut]  = useState(false)
@@ -66,6 +68,8 @@ export function ActiveVisitPanel() {
       durationMinutes,
       brandIds:        visit.brandIds,
       callNotes:       visit.callNotes || null,
+      contactName:     visit.contactName || null,
+      contactMethod:   visit.contactMethod || null,
       attempts:        0,
       lastAttempt:     null,
     })
@@ -126,18 +130,49 @@ export function ActiveVisitPanel() {
         </div>
       </div>
 
-      {/* Remote call notes — only shown for remote visits */}
+      {/* Remote call fields — only shown for remote visits */}
       {isRemote && (
-        <div>
-          <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Call notes</p>
-          <textarea
-            value={visit.callNotes}
-            onChange={e => updateCallNotes(e.target.value)}
-            placeholder="Summarise the call — what was discussed, decisions made, follow-ups agreed..."
-            rows={3}
-            className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm resize-none"
-            style={{ fontFamily: 'Arial, sans-serif' }}
-          />
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Person contacted</p>
+            <input
+              type="text"
+              value={visit.contactName}
+              onChange={e => updateContactName(e.target.value)}
+              placeholder="Store manager, buyer, department head..."
+              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm"
+              style={{ fontFamily: 'Arial, sans-serif' }}
+            />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1.5">Call method</p>
+            <div className="flex flex-wrap gap-2">
+              {CALL_METHODS.map(m => (
+                <button
+                  key={m}
+                  onClick={() => updateContactMethod(visit.contactMethod === m ? '' : m)}
+                  className={`px-3 py-1.5 rounded-full text-xs border ${
+                    visit.contactMethod === m
+                      ? 'bg-ios-navy text-white border-ios-navy'
+                      : 'border-gray-300 text-gray-700'
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Call notes</p>
+            <textarea
+              value={visit.callNotes}
+              onChange={e => updateCallNotes(e.target.value)}
+              placeholder="Summarise the call — what was discussed, decisions made, follow-ups agreed..."
+              rows={3}
+              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm resize-none"
+              style={{ fontFamily: 'Arial, sans-serif' }}
+            />
+          </div>
         </div>
       )}
 
